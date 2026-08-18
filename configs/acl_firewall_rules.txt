@@ -1,0 +1,115 @@
+============================================================
+FIREWALL RULES (ACLs) - ROUTER
+============================================================
+
+This document contains the firewall rules (ACLs) implemented on the router to restrict access between departments. The ACL enforces Zero Trust principles where HR cannot access IT, but IT can access HR for support purposes.
+
+============================================================
+1. ACL FINAL - FIREWALL RULES
+============================================================
+
+Policy: HR → IT = BLOCK, IT → HR = ALLOW
+
+! ============================================
+! Rule 1: Block HR → IT (ICMP Echo Request / Ping Initiation)
+! ============================================
+access-list 100 deny icmp 192.168.20.0 0.0.0.255 192.168.10.0 0.0.0.255 echo
+
+Description:
+- Blocks ICMP Echo Request (ping initiation) from VLAN 20 (HR) to VLAN 10 (IT)
+- Wildcard mask: 0.0.0.255 (represents /24 subnet)
+- HR cannot initiate connections to IT
+
+! ============================================
+! Rule 2: Allow HR → IT (ICMP Echo Reply / Ping Response)
+! ============================================
+access-list 100 permit icmp 192.168.20.0 0.0.0.255 192.168.10.0 0.0.0.255 echo-reply
+
+Description:
+- Allows ICMP Echo Reply (ping response) from VLAN 20 (HR) to VLAN 10 (IT)
+- Required because Cisco ACLs are stateless
+- Without this rule, replies from HR to IT would be blocked
+
+! ============================================
+! Rule 3: Allow ALL Traffic from IT → HR
+! ============================================
+access-list 100 permit ip 192.168.10.0 0.0.0.255 192.168.20.0 0.0.0.255
+
+Description:
+- Allows all traffic from VLAN 10 (IT) to VLAN 20 (HR)
+- IT can access HR resources for support purposes
+
+! ============================================
+! Rule 4: Block ALL Traffic from HR → IT
+! ============================================
+access-list 100 deny ip 192.168.20.0 0.0.0.255 192.168.10.0 0.0.0.255
+
+Description:
+- Blocks all traffic from VLAN 20 (HR) to VLAN 10 (IT)
+- Applies to all protocols (TCP, UDP, ICMP, etc.)
+- Prevents lateral movement from HR to IT
+
+! ============================================
+! Rule 5: Allow all other traffic
+! ============================================
+access-list 100 permit ip any any
+
+Description:
+- Allows all other traffic (internet, etc.)
+- Applies if no previous rules match
+
+============================================================
+2. STATELESS ACL EXPLANATION
+============================================================
+
+Cisco ACLs are STATELESS, meaning:
+- ACLs do not track connection states
+- Each packet is checked independently
+- Return traffic (reply) must be explicitly allowed
+
+Why Rule 2 (echo-reply) is needed:
+1. PC IT (VLAN 10) sends ICMP Echo Request to PC HR (VLAN 20)
+2. Request packet exits the router via VLAN 20 (outbound) → NOT checked by ACL
+3. PC HR receives the Request and sends ICMP Echo Reply to PC IT
+4. Reply packet ENTERS the router via VLAN 20 (inbound) → CHECKED by ACL!
+5. Without Rule 2, the ACL blocks the Reply (source: VLAN 20, destination: VLAN 10)
+6. PC IT never receives the Reply → Request Timed Out
+
+============================================================
+3. APPLY ACL TO ROUTER INTERFACE
+============================================================
+
+interface GigabitEthernet0/0.20
+ ip access-group 100 in
+
+Description:
+- ACL applied to VLAN 20 (HR) sub-interface as inbound
+- Traffic ENTERING the router from VLAN 20 is checked by the ACL
+- Traffic from IT to HR (exiting the router) is NOT checked by this ACL
+
+============================================================
+4. TEST RESULTS
+============================================================
+
+✅ PC IT (VLAN 10) → ping → Gateway HR (192.168.20.1) = SUCCESS
+✅ PC IT (VLAN 10) → ping → Server HR (192.168.20.50) = SUCCESS
+✅ PC IT (VLAN 10) → ping → PC HR (192.168.20.100) = SUCCESS
+✅ PC IT (VLAN 10) → ping → PC3 (VLAN 30) = SUCCESS
+✅ PC IT (VLAN 10) → ping → Gateway VLAN 30 = SUCCESS
+
+❌ PC HR (VLAN 20) → ping → Gateway IT (192.168.10.1) = DESTINATION UNREACHABLE
+❌ PC HR (VLAN 20) → ping → PC IT (192.168.10.100) = DESTINATION UNREACHABLE
+❌ Server HR (VLAN 20) → ping → Gateway IT (192.168.10.1) = DESTINATION UNREACHABLE
+
+✅ PC3 (VLAN 30) → ping → Gateway IT (192.168.10.1) = SUCCESS (No ACL!)
+✅ PC3 (VLAN 30) → ping → PC2 (VLAN 20) = SUCCESS
+✅ PC3 (VLAN 30) → ping → PC0 (VLAN 10) = SUCCESS
+
+============================================================
+5. SUMMARY
+============================================================
+
+- ACL successfully blocks HR → IT access (Destination Unreachable)
+- IT can access HR resources with SUCCESS
+- VLAN 30 (without ACL) proves routing and connectivity work correctly
+- Stateless ACLs require explicit rules for return traffic

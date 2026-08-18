@@ -1,0 +1,35 @@
+enable
+configure terminal
+vlan 10
+name IT
+exit
+vlan 20
+name HR
+exit
+vlan 30
+name VALIDASI
+exit
+interface fastEthernet 0/1
+switchport mode access
+switchport access vlan 10
+exit
+interface fastEthernet 0/2
+switchport mode access
+switchport access vlan 10
+exit
+interface fastEthernet 0/3
+switchport mode access
+switchport access vlan 20
+exit
+interface fastEthernet 0/4
+switchport mode access
+switchport access vlan 20
+exit
+interface fastEthernet 0/5
+switchport mode access
+switchport access vlan 30
+exit
+interface gigabitEthernet 0/1
+switchport mode trunk
+end
+write memory

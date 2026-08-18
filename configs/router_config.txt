@@ -1,0 +1,55 @@
+enable
+configure terminal
+interface gigabitEthernet 0/0
+no shutdown
+exit
+interface gigabitEthernet 0/0.10
+encapsulation dot1Q 10
+ip address 192.168.10.1 255.255.255.0
+exit
+interface gigabitEthernet 0/0.20
+encapsulation dot1Q 20
+ip address 192.168.20.1 255.255.255.0
+exit
+interface gigabitEthernet 0/0.30
+encapsulation dot1Q 30
+ip address 192.168.30.1 255.255.255.0
+exit
+ip dhcp excluded-address 192.168.10.1 192.168.10.99
+ip dhcp excluded-address 192.168.20.1 192.168.20.99
+ip dhcp excluded-address 192.168.30.1 192.168.30.99
+ip dhcp pool VLAN10_IT
+network 192.168.10.0 255.255.255.0
+default-router 192.168.10.1
+dns-server 8.8.8.8
+exit
+ip dhcp pool VLAN20_HR
+network 192.168.20.0 255.255.255.0
+default-router 192.168.20.1
+dns-server 8.8.8.8
+exit
+ip dhcp pool VLAN30_VALIDASI
+network 192.168.30.0 255.255.255.0
+default-router 192.168.30.1
+dns-server 8.8.8.8
+exit
+! ============================================
+! ACL 100 - FIREWALL RULES
+! ============================================
+! Policy: HR → IT = BLOCK, IT → HR = ALLOW
+! ============================================
+! Rule 1: Block HR → IT (ICMP Echo Request / Ping Initiation)
+access-list 100 deny icmp 192.168.20.0 0.0.0.255 192.168.10.0 0.0.0.255 echo
+! Rule 2: Allow HR → IT (ICMP Echo Reply / Ping Response)
+access-list 100 permit icmp 192.168.20.0 0.0.0.255 192.168.10.0 0.0.0.255 echo-reply
+! Rule 3: Allow ALL Traffic from IT → HR
+access-list 100 permit ip 192.168.10.0 0.0.0.255 192.168.20.0 0.0.0.255
+! Rule 4: Block ALL Traffic from HR → IT (except echo-reply allowed above)
+access-list 100 deny ip 192.168.20.0 0.0.0.255 192.168.10.0 0.0.0.255
+! Rule 5: Allow all other traffic
+access-list 100 permit ip any any
+! ============================================
+interface gigabitEthernet 0/0.20
+ip access-group 100 in
+end
+write memory
